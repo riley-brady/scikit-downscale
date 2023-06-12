@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
-DEFAULT_FEATURE_DIM = 'variable'
+DEFAULT_FEATURE_DIM = "variable"
 
 
 def xenumerate(arr):
@@ -41,15 +41,15 @@ def _da_to_df(da, feature_dim=DEFAULT_FEATURE_DIM):
             columns = da.coords[feature_dim]
         else:
             size_fd = dict(zip(da.dims, da.shape))[feature_dim]
-            columns = [f'feature{i}' for i in range(size_fd)]
+            columns = [f"feature{i}" for i in range(size_fd)]
     else:
-        columns = [f'{feature_dim}_0']
-    data = da.transpose('time', ...).data
-    df = pd.DataFrame(data, columns=columns, index=da.indexes['time'])
+        columns = [f"{feature_dim}_0"]
+    data = da.transpose("time", ...).data
+    df = pd.DataFrame(data, columns=columns, index=da.indexes["time"])
     return df
 
 
-def _fit_wrapper(X, *args, along_dim='time', feature_dim=DEFAULT_FEATURE_DIM, **kwargs):
+def _fit_wrapper(X, *args, along_dim="time", feature_dim=DEFAULT_FEATURE_DIM, **kwargs):
     if len(args) == 2:
         y, model = args
     else:
@@ -62,10 +62,10 @@ def _fit_wrapper(X, *args, along_dim='time', feature_dim=DEFAULT_FEATURE_DIM, **
 
     # create the empty output array
     models = xr.DataArray(
-        np.full(mask.shape, None, dtype=np.object), coords=mask.coords, dims=mask.dims
+        np.full(mask.shape, None, dtype=object), coords=mask.coords, dims=mask.dims
     )
 
-    scalar_obj = np.empty((1), dtype=np.object)
+    scalar_obj = np.empty((1), dtype=object)
     for index, val in xenumerate(mask):
         mod = copy.deepcopy(model)
         if not val:
@@ -117,12 +117,15 @@ def _predict_wrapper(
     return y
 
 
-def _transform_wrapper(X, models, direction='transform', feature_dim=DEFAULT_FEATURE_DIM, **kwargs):
-
+def _transform_wrapper(
+    X, models, direction="transform", feature_dim=DEFAULT_FEATURE_DIM, **kwargs
+):
     dims = list(X.dims)
     shape = list(X.shape)
     coords = dict(X.coords)
-    xtrans = xr.DataArray(np.full(shape, np.nan, dtype=X.dtype), coords=coords, dims=dims)
+    xtrans = xr.DataArray(
+        np.full(shape, np.nan, dtype=X.dtype), coords=coords, dims=dims
+    )
 
     for index, model in xenumerate(models):
         xdf = X[index].pipe(_da_to_df, feature_dim)
@@ -174,15 +177,15 @@ class PointWiseDownscaler:
         Dimension to apply the model along. Default is ``time``.
     """
 
-    def __init__(self, model, dim='time'):
+    def __init__(self, model, dim="time"):
         self._dim = dim
         self._model = model
         self._models = None
 
-        if not hasattr(model, 'fit'):
+        if not hasattr(model, "fit"):
             raise TypeError(
-                'Type %s does not have the fit method required'
-                ' by PointWiseDownscaler' % type(model)
+                "Type %s does not have the fit method required"
+                " by PointWiseDownscaler" % type(model)
             )
 
     def fit(self, X, *args, **kwargs):
@@ -208,22 +211,24 @@ class PointWiseDownscaler:
             step, where each parameter name is prefixed such that parameter
             ``p`` for step ``s`` has key ``s__p``.
         """
-        kws = {'along_dim': self._dim, 'feature_dim': DEFAULT_FEATURE_DIM}
+        kws = {"along_dim": self._dim, "feature_dim": DEFAULT_FEATURE_DIM}
         kws.update(kwargs)
 
         assert len(args) <= 1
         args = list(args)
         args.append(self._model)
 
-        X = self._to_feature_x(X, feature_dim=kws['feature_dim'])
+        X = self._to_feature_x(X, feature_dim=kws["feature_dim"])
 
         if X.chunks:
-            reduce_dims = [self._dim, kws['feature_dim']]
+            reduce_dims = [self._dim, kws["feature_dim"]]
             mask = _make_mask(X, reduce_dims)
             # we want the datatype to be an object because it will be populated
             # with fitted models (which have a dtype of object!)
             template = xr.full_like(mask, None, dtype=object)
-            self._models = xr.map_blocks(_fit_wrapper, X, args=args, kwargs=kws, template=template)
+            self._models = xr.map_blocks(
+                _fit_wrapper, X, args=args, kwargs=kws, template=template
+            )
         else:
             self._models = _fit_wrapper(X, *args, **kws)
 
@@ -250,23 +255,23 @@ class PointWiseDownscaler:
         y_pred : xarray.DataArray
         """
 
-        kws = {'along_dim': self._dim, 'feature_dim': DEFAULT_FEATURE_DIM}
+        kws = {"along_dim": self._dim, "feature_dim": DEFAULT_FEATURE_DIM}
         kws.update(kwargs)
 
-        X = self._to_feature_x(X, feature_dim=kws['feature_dim'])
+        X = self._to_feature_x(X, feature_dim=kws["feature_dim"])
 
         # check the model type to see if the model returns multiple columns are returned in
         # the .prdict function. notably, the GARD model family returns 3 columns
         try:
-            kws['n_outputs'] = self._model.n_outputs
-            kws['output_names'] = self._model.output_names
+            kws["n_outputs"] = self._model.n_outputs
+            kws["output_names"] = self._model.output_names
         except AttributeError:
-            kws['n_outputs'] = 1
+            kws["n_outputs"] = 1
 
         if X.chunks:
-            if kws['n_outputs'] == 1:
+            if kws["n_outputs"] == 1:
                 # if there's only one output columns, remove the feature_dim in input to generate output template
-                reduce_dims = [kws['feature_dim']]
+                reduce_dims = [kws["feature_dim"]]
                 mask = _make_mask(X, reduce_dims)
                 # we want the datatype to be the same as the input dataset (an object
                 # is much bigger unnecessarily and has different behavior)
@@ -276,22 +281,26 @@ class PointWiseDownscaler:
                 ydims = list(X.dims)
                 yshape = list(X.shape)
                 ycoords = dict(X.coords)
-                if kws['feature_dim'] not in ydims:
+                if kws["feature_dim"] not in ydims:
                     template = xr.DataArray(
-                        np.full(yshape, np.nan, dtype=X.dtype), coords=ycoords, dims=ydims
+                        np.full(yshape, np.nan, dtype=X.dtype),
+                        coords=ycoords,
+                        dims=ydims,
                     )
                     template = template.expand_dims(
-                        **{kws['feature_dim']: kws['output_names']}, axis=1
+                        **{kws["feature_dim"]: kws["output_names"]}, axis=1
                     ).copy()
-                    template = template.transpose(self._dim, kws['feature_dim'], ...)
+                    template = template.transpose(self._dim, kws["feature_dim"], ...)
                 else:
-                    yshape[X.get_axis_num(kws['feature_dim'])] = kws['n_outputs']
-                    ycoords[kws['feature_dim']] = kws['output_names']
+                    yshape[X.get_axis_num(kws["feature_dim"])] = kws["n_outputs"]
+                    ycoords[kws["feature_dim"]] = kws["output_names"]
                     template = xr.DataArray(
-                        np.full(yshape, np.nan, dtype=X.dtype), coords=ycoords, dims=ydims
+                        np.full(yshape, np.nan, dtype=X.dtype),
+                        coords=ycoords,
+                        dims=ydims,
                     )
                 chunksizes = dict(X.chunksizes)
-                chunksizes[kws['feature_dim']] = kws['n_outputs']
+                chunksizes[kws["feature_dim"]] = kws["n_outputs"]
                 template = template.chunk(chunksizes)
 
             return xr.map_blocks(
@@ -319,10 +328,10 @@ class PointWiseDownscaler:
         y_trans : xarray.DataArray
         """
 
-        kws = {'feature_dim': DEFAULT_FEATURE_DIM}
+        kws = {"feature_dim": DEFAULT_FEATURE_DIM}
         kws.update(kwargs)
 
-        X = self._to_feature_x(X, feature_dim=kws['feature_dim'])
+        X = self._to_feature_x(X, feature_dim=kws["feature_dim"])
 
         if X.chunks:
             return xr.map_blocks(_transform_wrapper, X, args=[self._models], kwargs=kws)
@@ -348,20 +357,26 @@ class PointWiseDownscaler:
         y_inverse_trans : xarray.DataArray
         """
 
-        kws = {'feature_dim': DEFAULT_FEATURE_DIM}
+        kws = {"feature_dim": DEFAULT_FEATURE_DIM}
         kws.update(kwargs)
 
-        X = self._to_feature_x(X, feature_dim=kws['feature_dim'])
+        X = self._to_feature_x(X, feature_dim=kws["feature_dim"])
 
         if X.chunks:
             return xr.map_blocks(
-                _transform_wrapper, X, args=[self._models, 'inverse_transform'], kwargs=kws
+                _transform_wrapper,
+                X,
+                args=[self._models, "inverse_transform"],
+                kwargs=kws,
             )
         else:
-            return _transform_wrapper(X, self._models, 'inverse_transform', **kws)
+            return _transform_wrapper(X, self._models, "inverse_transform", **kws)
 
     def get_attr(
-        self, key: str, dtype: str, template_output: Optional[Union[xr.DataArray]] = None
+        self,
+        key: str,
+        dtype: str,
+        template_output: Optional[Union[xr.DataArray]] = None,
     ) -> xr.Dataset:
         """
         Get attribute values specified in key from each of the pointwise models
@@ -401,7 +416,7 @@ class PointWiseDownscaler:
             X = X.to_array(feature_dim)
 
         if feature_dim not in X.dims:
-            X = X.expand_dims(**{feature_dim: [f'{feature_dim}_0']}, axis=1)
+            X = X.expand_dims(**{feature_dim: [f"{feature_dim}_0"]}, axis=1)
 
         # all features must be in 1 chunk for map_blocks to work later on
         if X.chunks:
@@ -411,7 +426,7 @@ class PointWiseDownscaler:
         return X
 
     def __repr__(self):
-        summary = ['<skdownscale.{}>'.format(self.__class__.__name__)]
-        summary.append('  Fit Status: {}'.format(self._models is not None))
-        summary.append('  Model:\n    {}'.format(self._model))
-        return '\n'.join(summary)
+        summary = ["<skdownscale.{}>".format(self.__class__.__name__)]
+        summary.append("  Fit Status: {}".format(self._models is not None))
+        summary.append("  Model:\n    {}".format(self._model))
+        return "\n".join(summary)
